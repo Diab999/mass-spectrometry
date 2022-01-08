@@ -1,0 +1,98 @@
+from pyopenms import *
+from matplotlib import pyplot as plt
+import numpy as np
+#gh = "https://raw.githubusercontent.com/OpenMS/pyopenms-extra/master"
+#urlretrieve (gh + "/src/data/YIC(Carbamidomethyl)DNQDTISSK.mzML", "observed.mzML")
+
+# Load mzML file and obtain spectrum for peptide YIC(Carbamidomethyl)DNQDTISSK
+exp = MSExperiment()
+MzMLFile().load("1.mzML", exp)
+spectra = exp.getSpectra()
+# Get first spectrum
+observed_spectrum = spectra[0]
+#get theoritacall
+tsg = TheoreticalSpectrumGenerator()
+theo_spectrum = MSSpectrum()
+p = tsg.getParameters()
+p.setValue("add_y_ions", "true")
+p.setValue("add_b_ions", "true")
+p.setValue("add_metainfo", "true")
+tsg.setParameters(p)
+#gh = "https://www.uniprot.org/uniprot/P01241.fasta"
+#urlretrieve (gh , "human.fasta")
+dig = ProteaseDigestion()#عملية هضم
+dig.getEnzymeName() # Trypsin
+result = "".join([l.strip() for l in open("y5.fasta").readlines()[1:]])
+result = AASequence.fromString(result)
+peptide = []
+len(peptide) 
+dig.digest(result, peptide, 5, 40)
+
+
+tsg = TheoreticalSpectrumGenerator()
+theo_spectrum = MSSpectrum()
+p = tsg.getParameters()
+p.setValue("add_y_ions", "true")
+p.setValue("add_b_ions", "true")
+p.setValue("add_metainfo", "true")
+tsg.setParameters(p)
+tsg.getSpectrum(theo_spectrum, peptide[1], 1, 2)
+
+#Now we can Visualize the observed(Expermental) and theoretical spectrum as a mirror plot:
+def mirror_plot(obs_mz, obs_int, theo_mz, theo_int, title):
+    obs_int = [element / max(obs_int) for element in obs_int] # relative intenstiy
+    theo_int = [element * -1 for element in theo_int] # invert the intensity for the mirror plot
+    plt.figure(figsize=(12,8))
+    plt.bar(obs_mz, obs_int, width = 3.0)
+    plt.bar(theo_mz, theo_int, width = 3.0)
+    plt.title(title)
+    plt.ylabel('intensity')
+    plt.xlabel('m/z')
+
+obs_mz, obs_int = observed_spectrum.get_peaks()
+
+# The mass-to-charge of our observed spectrum ranges from 200 - 800 m/z
+print(min(obs_mz)) # 212.012451171875
+print(max(obs_mz)) # 795.2837524414062
+
+# We filter the peaks of the theoretical spectrum to fit the range (to reduce image complexity)
+theo_mz, theo_int = [], []
+for mz, intensity in zip(*theo_spectrum.get_peaks()):
+    if mz >= 200.0 and mz <= 800.0:
+        theo_mz.append(mz)
+        theo_int.append(intensity)
+
+title = 'Observed vs theoretical spectrum'
+mirror_plot(obs_mz, obs_int, theo_mz, theo_int, title)
+
+###################################################################################################
+
+# find matching peaks between Expermental and theoretical spectrum.
+alignment = []
+spa = SpectrumAlignment()
+p = spa.getParameters()
+p.setValue("tolerance", 0.5)
+p.setValue("is_relative_tolerance", "false")
+spa.setParameters(p)
+# align both Theortical and Expermental (observed)spectra
+spa.getSpectrumAlignment(alignment, theo_spectrum, observed_spectrum)
+print("Number of matched peaks: " + str(len(alignment)))
+print("ion\ttheo. m/z\tobserved m/z")
+# Print matching ions and mz from theoretical spectrum
+for theo_idx, obs_idx in alignment:
+    ion_name = theo_spectrum.getStringDataArrays()[0][theo_idx].decode()
+    ion_charge = theo_spectrum.getIntegerDataArrays()[0][theo_idx]
+    print(ion_name + "\t" + str(ion_charge) + "\t"
+      + str(theo_spectrum[theo_idx].getMZ())
+      + "\t" + str(observed_spectrum[obs_idx].getMZ()))
+
+# visualization of the aligned spectrum
+theo_mz, theo_int, obs_mz, obs_int = [], [], [], []
+for theo_idx, obs_idx in alignment:
+    theo_mz.append(theo_spectrum[theo_idx].getMZ())
+    theo_int.append(theo_spectrum[theo_idx].getIntensity())
+    obs_mz.append(observed_spectrum[obs_idx].getMZ())
+    obs_int.append(observed_spectrum[obs_idx].getIntensity())
+
+title = 'Observed vs theoretical spectrum (aligned)'
+mirror_plot(obs_mz, obs_int, theo_mz, theo_int, title)
